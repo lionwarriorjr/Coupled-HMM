@@ -1,7 +1,5 @@
 require(MASS)
 require(ggplot2)
-Y <- c(1.0,1.0,1.1,1.1,1.4,1.4,1.8,1.8,2.0,2.5,2.6,2.8,3.0,3.2,3.5,3.7)
-T_ <- length(Y)
 ############################################################################
 #                       Forward/Backward Recursions                        #
 ############################################################################
@@ -58,11 +56,11 @@ forward_recursion <- function(alphas,curr,prev,t){
     result <- alphas[indexes]
   }else{
     index <- length(prev)+1
+    next_state <- curr[index]
     transmat <- P[[index]]
     K <- dim[index]
     result <- 0
     for(kminus in 1:K){
-      next_state <- curr[index]
       trans.prob <- transmat[kminus,next_state]
       prv <- c(prev,kminus)
       result <- result+trans.prob*forward_recursion(alphas,curr,prv,t)
@@ -123,12 +121,14 @@ normalize_gamma <- function(x,n,part.func){
 compute_gamma <- function(alphas,betas){
   gammas <<- array(0,c(dim,T_))
   for(t in 1:T_){
-    result <- gamma_unwrap(gammas,t,NULL)
-    gammas <<- normalize_gamma(gammas,t,result)
+    result <- gamma_unwrap(gammas,alphas,betas,t,NULL)
+    # TODO: make this dynamic with number of chains
+    gammas[,,t] <<- gammas[,,t]/result # add number of commas equal to number of chains
+    #gammas <<- normalize_gamma(gammas,t,result)
   }
   gammas
 }
-gamma_unwrap <- function(gammas,t,chains){
+gamma_unwrap <- function(gammas,alphas,betas,t,chains){
   if(length(chains) == M){
     indexes <- matrix(c(chains,t),1)
     gammas[indexes] <<- alphas[indexes]*betas[indexes]
@@ -138,11 +138,14 @@ gamma_unwrap <- function(gammas,t,chains){
     result <- 0
     for(k in 1:dim[index]){
       states <- c(chains,k)
-      result <- result+gamma_unwrap(gammas,t,states)
+      result <- result+gamma_unwrap(gammas,alphas,betas,t,states)
     }
   }
   result
 }
+############################################################################
+#                              E step updates                              #
+############################################################################
 compute_E_St <- function(t,m,chains){
   if(length(chains) == M){
     one_hot <- rep(0,dim[m])
@@ -232,7 +235,6 @@ compute_E_t_minus_t <- function(t,m,states.prev,states.curr){
 get_e_St_minus_m_St_m <- function(){
   e_St_minus_m_St_m <- matrix(0,T_,M)
   for(t in 2:T_){
-    print(t)
     normalizer <- 0
     index[[t]] <<- list()
     for(m in 1:M){
@@ -274,9 +276,9 @@ W_new <- function(){
   r2 <- matrix(0,total.dim,total.dim)
   for(t in 1:T_){
     stacked <- NULL
-    sapply(1:M,function(m){
-      stacked <<- c(stacked,e_St[[t]][[m]])
-    })
+    for(m in 1:M){
+      stacked <- c(stacked,e_St[[t]][[m]])
+    }
     stacked <- t(matrix(stacked))
     r1 <- r1+Y[t]%*%stacked
     cs <- matrix(0,total.dim,total.dim)
@@ -287,9 +289,9 @@ W_new <- function(){
 }
 PI_new <- function(){
   result <- PI
-  sapply(1:M,function(m){
-    result[[m]] <<- e_St[[1]][[m]]
-  })
+  for(m in 1:M){
+    result[[m]] <- e_St[[1]][[m]]
+  }
   result
 }
 P_new <- function(m){
@@ -325,12 +327,16 @@ C_new <- function(){
   })
   (r1-r2)/T_
 }
-# runEM
-assign("D", 1, envir=.GlobalEnv)
-assign("dim", c(3,5,4,5), envir=.GlobalEnv)
-assign("M", length(dim), envir=.GlobalEnv)
-assign("W", matrix(1,nrow=D,ncol=sum(dim)))
-assign("C", matrix(1,nrow=D,ncol=D))
+############################################################################
+#                                 runEM                                    #
+############################################################################
+Y <- c(1.0,1.0,1.1,1.1,1.4,1.4,1.8,1.8,2.0,2.5,2.6,2.8,3.0,3.2,3.5,3.7)
+T_ <- length(Y)
+dim <- c(4,4)
+M <- length(dim)
+D <- 1
+W <- matrix(1,nrow=D,ncol=sum(dim))
+C <- matrix(1,nrow=D,ncol=D)
 init_transition <- function(K){
   samples <- sapply(1:M,function(m){
     samp <- sample(100,K,replace=T)
@@ -343,14 +349,12 @@ P <- vector("list",length=M)
 sapply(1:M,function(m){
   P[[m]] <<- init_transition(dim[m])
 })
-assign("P", P, envir=.GlobalEnv)
 PI <- vector("list",length=M)
 sapply(1:M,function(m){
   samp <- sample(100,dim[m],replace=T)
   samp <- samp/sum(samp)
   PI[[m]] <<- samp
 })
-assign("PI", PI, envir=.GlobalEnv)
 start.w <- 1; end.w <- dim[1]
 starts <- c(start.w)
 ends <- c(end.w)
@@ -364,17 +368,11 @@ for(i in 1:20){
   alpha.mat <- forward()
   beta.mat <- backward()
   gamma.mat <- compute_gamma(alpha.mat,beta.mat)
-  assign("alpha.mat", alpha.mat, envir=.GlobalEnv)
-  assign("beta.mat", beta.mat, envir=.GlobalEnv)
-  assign("gamma.mat", gamma.mat, envir=.GlobalEnv)
-  assign("index", list(), envir=.GlobalEnv)
+  index <- list()
   e_St <- get_e_St()
   e_St_m_St_n <- get_e_St_m_St_n()
   e_St_minus_m_St_m <- get_e_St_minus_m_St_m()
   print(paste('Completed E-step iteration',i))
-  assign("e_St", e_St, envir=.GlobalEnv)
-  assign("e_St_m_St_n", e_St_m_St_n, envir=.GlobalEnv)
-  assign("e_St_minus_m_St_m", e_St_minus_m_St_m, envir=.GlobalEnv)
   W <- W_new()
   print(paste('M-step: updated W iteration',i))
   PI <- PI_new()
@@ -386,7 +384,9 @@ for(i in 1:20){
   C <- C_new()
   print(paste('M-step: updated C iteration',i))
 }
-# latent state predictions
+############################################################################
+#                         generate predictions                             #
+############################################################################
 pred <- sapply(1:T_,function(t){
   mu <- 0
   for(m in 1:M){
@@ -397,7 +397,9 @@ pred <- sapply(1:T_,function(t){
   }
   mu[1]
 })
-# visualize results
+############################################################################
+#                        visualization of results                          #
+############################################################################
 cs.data <- data.frame(cbind(pred,Y))
 corr <- cor(cs.data$pred,cs.data$Y)
 cs <- ggplot(aes(pred,Y), data=cs.data) + geom_point(color="firebrick", size=3) +
