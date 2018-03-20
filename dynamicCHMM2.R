@@ -115,16 +115,13 @@ normalize_gamma <- function(x,n,part.func){
   block.size <- prod(d.new)
   x[(block.size*(n-1)+1):(block.size*n)] <-
     x[(block.size*(n-1)+1):(block.size*n)]/part.func
-  res <- x[(block.size*(n-1)+1):(block.size*n)]
-  array(res,dim=d)
+  array(x,dim=d)
 }
 compute_gamma <- function(alphas,betas){
   gammas <<- array(0,c(dim,T_))
   for(t in 1:T_){
     result <- gamma_unwrap(gammas,alphas,betas,t,NULL)
-    # TODO: make this dynamic with number of chains
-    gammas[,,t] <<- gammas[,,t]/result # add number of commas equal to number of chains
-    #gammas <<- normalize_gamma(gammas,t,result)
+    gammas <<- normalize_gamma(gammas,t,result)
   }
   gammas
 }
