@@ -1,5 +1,6 @@
 require(MASS)
 require(ggplot2)
+
 ############################################################################
 #                       Forward/Backward Recursions                        #
 ############################################################################
@@ -19,6 +20,7 @@ compute_obs_prob <- function(y_t,states){
   result <- result[1]
   result
 }
+
 forward <- function(){
   alphas <- array(0,c(dim,T_))
   for(t in 1:T_){
@@ -26,6 +28,7 @@ forward <- function(){
   }
   alphas
 }
+
 forward_unwrap <- function(alphas,t,chains){
   if(length(chains) == M){
     obs.prob <- compute_obs_prob(Y[t],chains)
@@ -50,6 +53,7 @@ forward_unwrap <- function(alphas,t,chains){
   }
   alphas
 }
+
 forward_recursion <- function(alphas,curr,prev,t){
   if(length(prev) == M){
     indexes <- matrix(c(prev,t-1),1)
@@ -68,6 +72,7 @@ forward_recursion <- function(alphas,curr,prev,t){
   }
   result
 }
+
 backward <- function(){
   betas <- array(0,c(dim,T_))
   for(t in T_:1){
@@ -75,6 +80,7 @@ backward <- function(){
   }
   betas
 }
+
 backward_unwrap <- function(betas,t,chains){
   if(length(chains) == M){
     indexes <- matrix(c(chains,t),1)
@@ -88,6 +94,7 @@ backward_unwrap <- function(betas,t,chains){
   }
   betas
 }
+
 backward_recursion <- function(betas,curr,prev,t){
   if(length(curr) == M){
     result <- compute_obs_prob(Y[t],curr)
@@ -109,6 +116,7 @@ backward_recursion <- function(betas,curr,prev,t){
   }
   result
 }
+
 normalize_gamma <- function(x,n,part.func){
   d <- dim(x)
   d.new <- d[-length(d)]
@@ -117,6 +125,7 @@ normalize_gamma <- function(x,n,part.func){
     x[(block.size*(n-1)+1):(block.size*n)]/part.func
   array(x,dim=d)
 }
+
 compute_gamma <- function(alphas,betas){
   gammas <<- array(0,c(dim,T_))
   for(t in 1:T_){
@@ -125,6 +134,7 @@ compute_gamma <- function(alphas,betas){
   }
   gammas
 }
+
 gamma_unwrap <- function(gammas,alphas,betas,t,chains){
   if(length(chains) == M){
     indexes <- matrix(c(chains,t),1)
@@ -140,6 +150,7 @@ gamma_unwrap <- function(gammas,alphas,betas,t,chains){
   }
   result
 }
+
 ############################################################################
 #                              E step updates                              #
 ############################################################################
@@ -159,6 +170,7 @@ compute_E_St <- function(t,m,chains){
   }
   result
 }
+
 get_e_St <- function(){
   e_St <- list()
   for(t in 1:T_){
@@ -169,6 +181,7 @@ get_e_St <- function(){
   }
   e_St
 }
+
 compute_E_St_E_St <- function(t,m,n,chains){
   if(length(chains) == M){
     o1 <- rep(0,dim[m])
@@ -187,6 +200,7 @@ compute_E_St_E_St <- function(t,m,n,chains){
   }
   result
 }
+
 get_e_St_m_St_n <- function(){
   e_St_m_St_n <- list()
   for(t in 1:T_){
@@ -200,6 +214,7 @@ get_e_St_m_St_n <- function(){
   }
   e_St_m_St_n
 }
+
 compute_E_t_minus_t <- function(t,m,states.prev,states.curr){
   if(length(states.prev) == M){
     m1 <- states.prev[m]
@@ -229,6 +244,7 @@ compute_E_t_minus_t <- function(t,m,states.prev,states.curr){
   }
   result
 }
+
 get_e_St_minus_m_St_m <- function(){
   e_St_minus_m_St_m <- matrix(0,T_,M)
   for(t in 2:T_){
@@ -248,6 +264,7 @@ get_e_St_minus_m_St_m <- function(){
   }
   e_St_minus_m_St_m
 }
+
 ############################################################################
 #                             M step updates                               #
 ############################################################################
@@ -267,6 +284,7 @@ fill_W <- function(A,t){
   }
   A
 }
+
 W_new <- function(){
   total.dim <- sum(dim)
   r1 <- matrix(0,1,total.dim)
@@ -284,6 +302,7 @@ W_new <- function(){
   }
   r1%*%ginv(r2)
 }
+
 PI_new <- function(){
   result <- PI
   for(m in 1:M){
@@ -291,6 +310,7 @@ PI_new <- function(){
   }
   result
 }
+
 P_new <- function(m){
   P_m <- P[[m]]
   sapply(1:dim[m],function(i){
@@ -300,6 +320,7 @@ P_new <- function(m){
   })
   P_m
 }
+
 P_new_helper <- function(m,i,j){
   result <- marginal <- 0
   sapply(2:T_,function(t){
@@ -311,6 +332,7 @@ P_new_helper <- function(m,i,j){
   result <- ifelse(marginal > 0,result/marginal,0.0)
   result
 }
+
 C_new <- function(){
   r1 <- (Y%*%Y)
   r2 <- 0
@@ -324,6 +346,7 @@ C_new <- function(){
   })
   (r1-r2)/T_
 }
+
 ############################################################################
 #                                 runEM                                    #
 ############################################################################
@@ -334,6 +357,7 @@ M <- length(dim)
 D <- 1
 W <- matrix(1,nrow=D,ncol=sum(dim))
 C <- matrix(1,nrow=D,ncol=D)
+
 init_transition <- function(K){
   samples <- sapply(1:M,function(m){
     samp <- sample(100,K,replace=T)
@@ -346,12 +370,14 @@ P <- vector("list",length=M)
 sapply(1:M,function(m){
   P[[m]] <<- init_transition(dim[m])
 })
+
 PI <- vector("list",length=M)
 sapply(1:M,function(m){
   samp <- sample(100,dim[m],replace=T)
   samp <- samp/sum(samp)
   PI[[m]] <<- samp
 })
+
 start.w <- 1; end.w <- dim[1]
 starts <- c(start.w)
 ends <- c(end.w)
@@ -361,7 +387,8 @@ for(m in 2:M){
   start.w <- ends[m-1]+1
   starts <- c(starts,start.w)
 }
-for(i in 1:20){
+
+for(i in 1:100){
   alpha.mat <- forward()
   beta.mat <- backward()
   gamma.mat <- compute_gamma(alpha.mat,beta.mat)
@@ -381,6 +408,7 @@ for(i in 1:20){
   C <- C_new()
   print(paste('M-step: updated C iteration',i))
 }
+
 ############################################################################
 #                         generate predictions                             #
 ############################################################################
@@ -394,6 +422,7 @@ pred <- sapply(1:T_,function(t){
   }
   mu[1]
 })
+
 ############################################################################
 #                        visualization of results                          #
 ############################################################################
